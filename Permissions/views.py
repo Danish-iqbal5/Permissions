@@ -7,7 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from datetime import timedelta
 from .models import User
 from django.contrib.auth.hashers import make_password, check_password
-from .utils import send_otp_email
+from .utils import send_otp_email , send_password_setup_email
 from django.utils import timezone
 from .serializers import UserSerializer
 
@@ -84,6 +84,31 @@ class AdminDashboardRequestApprovalView(APIView):
         User.objects.create(pending_user=pending_user)
 
         return Response({"message": "Request submitted for admin approval."}, status=201)
+    def patch(self, request):
+        pk = request.data.get('id')
+        
+
+        try:
+            user = User.objects.get(id=pk)
+        except User.DoesNotExist:
+            return Response({"error": "Approval request not found."}, status=404)
+        
+        
+        if not user.is_verified:
+            return Response({"error": "User is not verified."}, status=400)
+        
+        if not user.is_active:
+            user.is_active = True
+            user.approved_at = timezone.now()
+            user.save()
+            mail_sent =  send_password_setup_email(user.email, f"http://localhost:8000/set-password/{user.id}/")
+            if mail_sent:
+                print("Mail sent successfully")
+
+        
+            
+
+        return Response({"message": "Request updated successfully."}, status=200)
     
 
 

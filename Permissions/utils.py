@@ -9,9 +9,23 @@ def send_otp_email(to_email):
     send_mail(
         subject,
         message,
-        'Danish@Bussines.com',  # from email
-        [to_email],          # recipient
+        'Danish@Bussines.com', 
+        [to_email],         
         fail_silently=False,
     )
 
     return otp
+
+def send_password_setup_email(to_email , set_password_url):
+    subject = 'Set Up Your Password'
+    message = f'Please set up your password by clicking the following link: {set_password_url}'
+
+    send_mail(
+        subject,
+        message,
+        'Danish@Bussines.com', 
+        [to_email],         
+        fail_silently=False,
+    )
+    
+    return True
