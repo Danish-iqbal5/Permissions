@@ -1,0 +1,102 @@
+# =============================
+# MIGRATION NOTES
+# =============================
+# 1) You changed fields (otp -> otp_hash) and added rejection fields. Create and apply migrations:
+# python manage.py makemigrations
+# python manage.py migrate
+# 2) If you had old data in `otp`, write a data migration to null it out or map to otp_hash if needed.
+# 3) Ensure you added 'rest_framework_simplejwt.token_blacklist' to INSTALLED_APPS, then migrate.
+
+
+# =============================
+# SWAGGER USAGE NOTES
+# =============================
+# - Swagger UI at /swagger/
+# - Endpoints grouped via @swagger_auto_schema tags: Auth, Admin
+# - Try flows:
+# POST /register/ { username, email, full_name }
+# POST /verify-otp/ { email, otp }
+# POST /admin-dashboard/ [PATCH] approve or reject
+# POST /set-password/<id>/ { password }
+# POST /login/ { username, password } -> only works after approval
+# POST /refresh/ { refresh }
+# POST /logout/ { refresh }
+
+
+🚀 Phase 1 – MVP (Solid Foundation)
+
+Goal: Clean, production-ready onboarding flow.
+
+✅ Custom User model (ditch Django’s default User before it’s too late).
+
+✅ JWT Auth (login, refresh, logout).
+
+✅ OTP hashed in DB (not plain text).
+
+✅ Resend OTP endpoint.
+
+✅ Admin Approval dashboard API (pending, approved, rejected).
+
+✅ Swagger docs with proper grouping & examples.
+
+👉 By the end of this, you’ll have a portfolio-ready authentication system.
+
+🏗️ Phase 2 – Advanced Features
+
+Goal: Flex your backend muscles.
+
+🔒 Role-Based Access Control (User, Admin, Super Admin).
+
+🔒 Forgot Password / Reset Password via email.
+
+🔒 Rate limiting on OTP + login attempts (DRF throttling).
+
+🔒 Email templates (HTML, branding).
+
+📊 Audit Logging (who approved whom, when).
+
+⚡ Async email sending (Celery + Redis).
+
+👉 This makes your project look real-world secure and not “toy-level.”
+
+💼 Phase 3 – SaaS-Ready Expansion
+
+Goal: Turn this into an actual SaaS starter kit.
+
+👥 Organizations/Teams: Users belong to an org, with org admins.
+
+💳 Subscription Plans: Free vs Premium, feature flags.
+
+💳 Stripe/PayPal billing integration.
+
+🔑 API Keys for users/orgs to use the service programmatically.
+
+📩 Webhooks (events like “user approved” or “org created”).
+
+👉 At this point, your project isn’t just a demo — it’s startup material.
+
+🌐 Phase 4 – Show-off Extras
+
+Goal: Make recruiters/devs drool.
+
+🔐 Multi-Factor Authentication (MFA with Google Authenticator).
+
+🛡️ Single Sign-On (SSO with Google/Microsoft).
+
+📊 Monitoring & Metrics (Prometheus, Grafana, or Django-silk).
+
+🕵️ Security hardening (CSP headers, advanced logging).
+
+🌍 Multi-tenancy: separate DB schemas per org.
+
+👉 This phase screams serious backend engineer who knows SaaS architecture.
+
+⚖️ Strategy
+
+Build Phase 1 properly first — that’s already good enough for interviews.
+
+Add Phase 2 when you want to show “I can handle production systems.”
+
+Do Phase 3 only if you want to pitch this as a real SaaS product.
+
+Keep Phase 4 features as cherry on top to stand out.

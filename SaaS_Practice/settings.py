@@ -41,7 +41,40 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'Permissions',
     'drf_yasg',
+    'rest_framework_simplejwt.token_blacklist',
 ]
+
+AUTHENTICATION_BACKENDS = [
+'django.contrib.auth.backends.ModelBackend',
+]
+
+REST_FRAMEWORK = {
+'DEFAULT_AUTHENTICATION_CLASSES': (
+'rest_framework_simplejwt.authentication.JWTAuthentication',
+),
+'DEFAULT_PERMISSION_CLASSES': (
+'rest_framework.permissions.IsAuthenticated',
+),
+'DEFAULT_THROTTLE_CLASSES': [
+'rest_framework.throttling.AnonRateThrottle',
+'rest_framework.throttling.UserRateThrottle',
+],
+'DEFAULT_THROTTLE_RATES': {
+'anon': '50/hour',
+'user': '200/hour',
+'otp': '5/min', # used by custom throttle class name below
+'login': '10/min', # used by custom throttle class name below
+'resend_otp': '3/min', # used by custom throttle class name below
+},
+}
+from datetime import timedelta
+SIMPLE_JWT = {
+'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+'ROTATE_REFRESH_TOKENS': True,
+'BLACKLIST_AFTER_ROTATION': True,
+'AUTH_HEADER_TYPES': ('Bearer',),
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -124,6 +157,41 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# REST Framework settings
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',
+        'user': '1000/day',
+        'login': '5/minute',
+        'otp_verify': '5/minute',
+        'resend_otp': '3/minute',
+    }
+}
+
+# JWT Settings
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+    'ALGORITHM': 'HS256',
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+}
 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
