@@ -21,8 +21,10 @@ from .models import UserProfile
 from .permissions import IsApprovedAndActive
 from .serializers import (
     AdminDecisionSerializer,
+    ForgotPasswordSerializer,
     PasswordSetSerializer,
     RegisterSerializer,
+    ResetPasswordSerializer,
     ResendOTPSerializer,
     UserSerializer,
     VerifyOTPSerializer,
@@ -39,9 +41,9 @@ from .utils import (
 )
 
 
-# ============================================================
+
 # Authentication Views
-# ============================================================
+
 
 class ResendOTPView(APIView):
     """
@@ -84,37 +86,72 @@ class ResendOTPView(APIView):
 
 class ApprovedUserTokenObtainPairView(TokenObtainPairView):
     """
-    Enhanced login endpoint that checks user approval status.
+    Enhanced login endpoint that checks user approval status and handles login attempts.
     
     Takes a set of user credentials and returns an access and refresh JSON web
     token pair to prove the authentication of those credentials.
     Only works for approved and active users.
+    
+    Features:
+    - Checks user approval status
+    - Tracks failed login attempts
+    - Implements temporary account lockouts
+    - Exponential backoff for repeated failures
     """
+    throttle_classes = [LoginRateThrottle]
+    
     @swagger_auto_schema(
         tags=["Auth"],
         operation_summary="Login for approved users",
         operation_description="Authenticate and get JWT tokens. Only works for approved users.",
         responses={
             200: openapi.Response("Login successful with JWT tokens"),
-            403: openapi.Response("Account not approved or inactive"),
+            403: openapi.Response("Account not approved, inactive, or locked"),
             404: openapi.Response("User not found"),
+            429: openapi.Response("Too many login attempts")
         }
     )
     def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        if response.status_code == 200:
-            try:
-                user = User.objects.get(username=request.data['username'])
-                profile = user.profile
-                if not profile.is_approved or not user.is_active:
-                    return Response({
-                        "error": "Your account is not yet approved or is inactive."
-                    }, status=403)
-            except (User.DoesNotExist, ObjectDoesNotExist):
+        try:
+            user = User.objects.get(username=request.data['username'])
+            profile = user.profile
+            
+            # Check if account is locked
+            if profile.account_locked_until and profile.account_locked_until > timezone.now():
+                wait_minutes = int((profile.account_locked_until - timezone.now()).total_seconds() / 60)
                 return Response({
-                    "error": "User not found"
-                }, status=404)
-        return response
+                    "error": f"Account is temporarily locked. Please try again in {wait_minutes} minutes."
+                }, status=403)
+            
+            # Check approval status
+            if not profile.is_approved or not user.is_active:
+                return Response({
+                    "error": "Your account is not yet approved or is inactive."
+                }, status=403)
+                
+            # Attempt login
+            response = super().post(request, *args, **kwargs)
+            
+            if response.status_code == 200:
+                # Successful login - reset failed attempts
+                profile.reset_login_attempts()
+                return response
+            else:
+                # Failed login - increment counter
+                profile.increment_login_attempts()
+                return Response({
+                    "error": "Invalid credentials."
+                }, status=401)
+                
+        except (User.DoesNotExist, ObjectDoesNotExist):
+            return Response({
+                "error": "User not found"
+            }, status=404)
+        except Exception as e:
+            # Handle other exceptions (like invalid token)
+            return Response({
+                "error": "An error occurred during login."
+            }, status=400)
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -140,9 +177,8 @@ class LogoutView(APIView):
                 "error": "Invalid token."
             }, status=400)
 
-# ============================================================
 # Admin Views
-# ============================================================
+
 
 class AdminDashboardRequestApprovalView(APIView):
     """
@@ -266,9 +302,9 @@ class AdminDashboardRequestApprovalView(APIView):
 
 
 
-# ============================================================
+
 # Registration Views
-# ============================================================
+
 
 class RegisterView(APIView):
     """
@@ -322,9 +358,9 @@ class RegisterView(APIView):
 
 
 
-# ============================================================
+
 # Verification Views
-# ============================================================
+
 
 class VerifyOTPView(APIView):
     """
@@ -380,9 +416,101 @@ class VerifyOTPView(APIView):
 
 
 
-# ============================================================
+
 # Password Management Views
-# ============================================================
+
+class ForgotPasswordView(APIView):
+    """
+    Forgot password endpoint.
+    
+    Allows users to request a password reset by providing their email.
+    Sends OTP to the user's email for verification.
+    Rate limited to prevent abuse.
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [ResendOTPThrottle]
+
+    @swagger_auto_schema(
+        tags=["Password"],
+        operation_summary="Request password reset",
+        operation_description="Request a password reset and receive OTP",
+        request_body=ForgotPasswordSerializer,
+        responses={
+            200: openapi.Response("OTP sent to email"),
+            404: openapi.Response("User not found"),
+            429: openapi.Response("Too many requests")
+        }
+    )
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+
+        try:
+            user = User.objects.get(email=email)
+            profile = user.profile
+        except (User.DoesNotExist, ObjectDoesNotExist):
+            return Response({"error": "User not found."}, status=404)
+
+        # Generate and send OTP
+        otp_hash, otp_created_at = generate_and_send_otp(email)
+        profile.otp_hash = otp_hash
+        profile.otp_created_at = otp_created_at
+        profile.save(update_fields=["otp_hash", "otp_created_at"])
+
+        return Response({"message": "Password reset OTP sent to your email."}, status=200)
+
+class ResetPasswordView(APIView):
+    """
+    Reset password endpoint.
+    
+    Allows users to set a new password after verifying their OTP.
+    Rate limited to prevent brute force attempts.
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [OTPVerifyRateThrottle]
+
+    @swagger_auto_schema(
+        tags=["Password"],
+        operation_summary="Reset password",
+        operation_description="Reset password using OTP verification",
+        request_body=ResetPasswordSerializer,
+        responses={
+            200: openapi.Response("Password reset successfully"),
+            400: openapi.Response("Invalid or expired OTP"),
+            404: openapi.Response("User not found")
+        }
+    )
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+        otp_input = serializer.validated_data['otp']
+        new_password = serializer.validated_data['new_password']
+
+        try:
+            user = User.objects.get(email=email)
+            profile = user.profile
+        except (User.DoesNotExist, ObjectDoesNotExist):
+            return Response({"error": "User not found."}, status=404)
+
+        if not profile.otp_hash or not profile.otp_created_at:
+            return Response({"error": "No OTP set for this user."}, status=400)
+
+        # Verify OTP
+        if not verify_otp(otp_input, profile.otp_hash, profile.otp_created_at):
+            return Response({"error": "Invalid or expired OTP."}, status=400)
+
+        # Reset password
+        user.password = make_password(new_password)
+        user.save(update_fields=["password"])
+
+        # Clear OTP
+        profile.otp_hash = None
+        profile.otp_created_at = None
+        profile.save(update_fields=["otp_hash", "otp_created_at"])
+
+        return Response({"message": "Password reset successfully. You can now log in with your new password."}, status=200)
 
 class SetPasswordView(APIView):
     """

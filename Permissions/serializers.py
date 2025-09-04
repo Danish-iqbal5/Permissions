@@ -14,9 +14,11 @@
 
 
 
+import re
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile  
+from .models import UserProfile
+from .validators import validate_password_strength, validate_username
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -32,33 +34,66 @@ class Meta:
 
 
 class RegisterSerializer(serializers.Serializer):
-  username = serializers.CharField()
-  email = serializers.EmailField()
-  full_name = serializers.CharField()
-
-
-
+    username = serializers.CharField(validators=[validate_username])
+    email = serializers.EmailField()
+    full_name = serializers.CharField(min_length=2, max_length=100)
+    
+    def validate_full_name(self, value):
+        if not re.match(r'^[a-zA-Z\s]+$', value):
+            raise serializers.ValidationError(
+                "Full name should only contain letters and spaces."
+            )
+        return value
 
 class VerifyOTPSerializer(serializers.Serializer):
-  email = serializers.EmailField()
-  otp = serializers.CharField(max_length=6)
-
-
-
+    email = serializers.EmailField()
+    otp = serializers.CharField(
+        min_length=6, 
+        max_length=6,
+        error_messages={
+            'min_length': 'OTP must be exactly 6 digits.',
+            'max_length': 'OTP must be exactly 6 digits.'
+        }
+    )
+    
+    def validate_otp(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError("OTP must contain only digits.")
+        return value
 
 class ResendOTPSerializer(serializers.Serializer):
-  email = serializers.EmailField()
-
-
-
+    email = serializers.EmailField()
 
 class AdminDecisionSerializer(serializers.Serializer):
-  id = serializers.IntegerField()
-  action = serializers.ChoiceField(choices=['approve', 'reject'])
-  rejection_reason = serializers.CharField(allow_blank=True, required=False)
+    id = serializers.IntegerField()
+    action = serializers.ChoiceField(
+        choices=['approve', 'reject'],
+        error_messages={
+            'invalid_choice': 'Action must be either "approve" or "reject".'
+        }
+    )
+    rejection_reason = serializers.CharField(
+        allow_blank=True, 
+        required=False,
+        max_length=500
+    )
 
-
-
+    def validate(self, data):
+        if data.get('action') == 'reject' and not data.get('rejection_reason'):
+            raise serializers.ValidationError(
+                {"rejection_reason": "Rejection reason is required when rejecting a user."}
+            )
+        return data
 
 class PasswordSetSerializer(serializers.Serializer):
-  password = serializers.CharField(min_length=8)        
+    password = serializers.CharField(validators=[validate_password_strength])
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    """Request a password reset by providing email."""
+    email = serializers.EmailField()
+
+class ResetPasswordSerializer(serializers.Serializer):
+    """Reset password using OTP and new password."""
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6)
+    new_password = serializers.CharField(min_length=8)
