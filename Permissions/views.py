@@ -1,41 +1,49 @@
-from django.shortcuts import render
-from django.shortcuts import render
-from rest_framework.views import APIView , Response
-from rest_framework.permissions import IsAdminUser ,IsAuthenticated , AllowAny
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework_simplejwt.tokens import RefreshToken
-from datetime import timedelta
-from .models import User
-from django.contrib.auth.hashers import make_password, check_password
-from .utils import send_otp_email , send_password_setup_email
 from django.utils import timezone
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from django.contrib.auth.models import User
+from django.contrib.auth.hashers import make_password
+from django.core.exceptions import ObjectDoesNotExist
+from datetime import timedelta
+
+from .models import UserProfile
+from .utils import send_otp_email, send_password_setup_email
 from .serializers import UserSerializer
+
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        UserALreadyExists = False
         username = request.data.get('username')
         email = request.data.get('email')
+
+        if not all([username, email]):
+            return Response({"error": "Username and email are required."}, status=400)
+
         if User.objects.filter(email=email).exists():
-            UserALreadyExists = False
             return Response({"error": "Email already in use."}, status=400)
+
         if User.objects.filter(username=username).exists():
-            UserALreadyExists = False
             return Response({"error": "Username already in use."}, status=400)
 
-        if not UserALreadyExists:
-           
-            user = User.objects.create(
-                username=username,
-                email=email,
-                otp=send_otp_email(email)
-            )
+        # Create user without password for now
+        user = User.objects.create_user(username=username, email=email)
+        user.is_active = False
+        user.save()
 
+        # Generate and send OTP
+        otp = send_otp_email(email)
 
-        return Response({"otp Send to your mail  .. Successfully"}, status=201)
+        # Create user profile with optional fields blank
+        UserProfile.objects.create(
+            user=user,
+            otp=otp,
+            otp_created_at=timezone.now()
+        )
 
+        return Response({"message": "OTP sent to your email."}, status=201)
 
 
 class VerifyOTPView(APIView):
@@ -45,84 +53,78 @@ class VerifyOTPView(APIView):
         email = request.data.get('email')
         otp = request.data.get('otp')
 
+        if not all([email, otp]):
+            return Response({"error": "Email and OTP are required."}, status=400)
+
         try:
             user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({"Invalid email"}, status=400)
+            profile = user.profile
+        except (User.DoesNotExist, ObjectDoesNotExist):
+            return Response({"error": "Invalid email or user not found."}, status=404)
 
-        if user.otp != otp:
-            return Response({"Invalid OTP."}, status=400)
+        if profile.otp != otp:
+            return Response({"error": "Invalid OTP."}, status=400)
 
+        if profile.otp_created_at and (timezone.now() - profile.otp_created_at > timedelta(minutes=10)):
+            return Response({"error": "OTP expired."}, status=400)
 
-        if timezone.now() > user.created_at + timedelta(minutes=10):
-            return Response({"error": "OTP has expired."}, status=400)
-
-        user.is_verified = True
-        user.save()
+        profile.is_verified = True
+        profile.otp = None
+        profile.save(update_fields=["is_verified", "otp"])
 
         return Response({"message": "OTP verified successfully."}, status=200)
-    
+
 
 class AdminDashboardRequestApprovalView(APIView):
     def get(self, request):
-        data = User.objects.all()
-        serializer = UserSerializer(data, many=True)
-        # serializer = AdminDashboardRequestApprovalSerializer(requests, many=True)
+        users = UserProfile.objects.all()
+        serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
 
-    def post(self, request):
-        pending_user_id = request.data.get('pending_user_id')
-
-        try:
-            pending_user = User.objects.get(id=pending_user_id, is_verified=True)
-        except User.DoesNotExist:
-            return Response({"error": "Pending user not found or not verified."}, status=404)
-
-        if User.objects.filter(pending_user=pending_user).exists():
-            return Response({"error": "Request already submitted."}, status=400)
-
-        User.objects.create(pending_user=pending_user)
-
-        return Response({"message": "Request submitted for admin approval."}, status=201)
     def patch(self, request):
-        pk = request.data.get('id')
-        
+        user_profile_id = request.data.get('id')
 
         try:
-            user = User.objects.get(id=pk)
-        except User.DoesNotExist:
-            return Response({"error": "Approval request not found."}, status=404)
-        
-        
-        if not user.is_verified:
-            return Response({"error": "User is not verified."}, status=400)
-        
+            profile = UserProfile.objects.get(id=user_profile_id)
+        except UserProfile.DoesNotExist:
+            return Response({"error": "User profile not found."}, status=404)
+
+        if not profile.is_verified:
+            return Response({"error": "User is not verified yet."}, status=400)
+
+        user = profile.user
         if not user.is_active:
             user.is_active = True
-            user.approved_at = timezone.now()
-            user.save()
-            mail_sent =  send_password_setup_email(user.email, f"http://localhost:8000/set-password/{user.id}/")
-            if mail_sent:
-                print("Mail sent successfully")
+            user.save(update_fields=["is_active"])
 
-        
-            
+            profile.is_approved = True
+            profile.approved_at = timezone.now()
+            profile.save(update_fields=["is_approved", "approved_at"])
 
-        return Response({"message": "Request updated successfully."}, status=200)
-    
+            set_password_url = f"http://localhost:8000/set-password/{profile.id}/"
+            send_password_setup_email(user.email, set_password_url)
+
+        return Response({"message": "User approved and password setup email sent."}, status=200)
 
 
 class SetPasswordView(APIView):
     def post(self, request, user_id):
         password = request.data.get("password")
+
         if not password:
             return Response({"error": "Password is required."}, status=400)
 
         try:
-            user = User.objects.get(id=user_id, is_active=True)
-        except User.DoesNotExist:
-            return Response({"error": "Invalid or inactive user."}, status=404)
+            profile = UserProfile.objects.get(id=user_id)
+        except UserProfile.DoesNotExist:
+            return Response({"error": "User not found."}, status=404)
 
+        user = profile.user
+        if not user.is_active or not profile.is_approved:
+            return Response({"error": "User is not approved or active."}, status=403)
+
+        # Set and hash the new password
         user.password = make_password(password)
-        user.save()
-        return Response({"message": "Password set successfully."}, status=200)    
+        user.save(update_fields=["password"])
+
+        return Response({"message": "Password set successfully. You can now log in."}, status=200)
