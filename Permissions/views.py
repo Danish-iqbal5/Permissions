@@ -171,7 +171,7 @@ class LogoutView(APIView):
     @swagger_auto_schema(
         tags=["Auth"],
         operation_summary="Logout user",
-        operation_description="Blacklist the current refresh token to prevent its future use",
+        operation_description="Blacklist the current token use",
         responses={
             200: openapi.Response("Successfully logged out"),
             400: openapi.Response("Invalid token")
@@ -504,7 +504,7 @@ class ResetPasswordView(APIView):
     Rate limited to prevent brute force attempts.
     """
     permission_classes = [AllowAny]
-    throttle_classes = [OTPVerifyRateThrottle]
+    # throttle_classes = [OTPVerifyRateThrottle]
 
     @swagger_auto_schema(
         tags=["Password"],
