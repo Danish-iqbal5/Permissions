@@ -10,7 +10,7 @@ from django.utils import timezone
 # Third-party imports
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated 
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -86,15 +86,15 @@ class ResendOTPView(APIView):
 
 class ApprovedUserTokenObtainPairView(TokenObtainPairView):
     """
-    Enhanced login endpoint that checks user approval status and handles login attempts.
+    Enhanced login endpoint that handles both superusers and regular approved users.
     
     Takes a set of user credentials and returns an access and refresh JSON web
     token pair to prove the authentication of those credentials.
-    Only works for approved and active users.
     
     Features:
-    - Checks user approval status
-    - Tracks failed login attempts
+    - Superusers: Login without profile checks
+    - Regular users: Requires approval and profile verification
+    - Tracks failed login attempts for regular users
     - Implements temporary account lockouts
     - Exponential backoff for repeated failures
     """
@@ -114,7 +114,20 @@ class ApprovedUserTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         try:
             user = User.objects.get(username=request.data['username'])
-            profile = user.profile
+            
+            # Handle superusers (no profile required)
+            if user.is_superuser:
+                # Attempt login for superuser
+                response = super().post(request, *args, **kwargs)
+                return response
+            
+            # Handle regular users (profile required)
+            try:
+                profile = user.profile
+            except ObjectDoesNotExist:
+                return Response({
+                    "error": "User profile not found. Please register through the registration endpoint."
+                }, status=404)
             
             # Check if account is locked
             if profile.account_locked_until and profile.account_locked_until > timezone.now():
@@ -143,7 +156,7 @@ class ApprovedUserTokenObtainPairView(TokenObtainPairView):
                     "error": "Invalid credentials."
                 }, status=401)
                 
-        except (User.DoesNotExist, ObjectDoesNotExist):
+        except User.DoesNotExist:
             return Response({
                 "error": "User not found"
             }, status=404)
@@ -220,7 +233,7 @@ class AdminDashboardRequestApprovalView(APIView):
         if not request.user.is_staff:
             return Response({"error": "Admin access required"}, status=403)
         
-        # Get all pending users (verified but not approved/rejected)
+       
         pending_users = UserProfile.objects.filter(
             is_verified=True,
             is_approved=False,
@@ -229,12 +242,15 @@ class AdminDashboardRequestApprovalView(APIView):
         
         users_data = []
         for profile in pending_users:
+            # Include the password setup API endpoint for approved users
+            api_endpoint = f"http://localhost:8000/set-password/{profile.id}/" if profile.is_approved else None
             users_data.append({
                 'id': profile.id,
                 'username': profile.user.username,
                 'email': profile.user.email,
                 'full_name': profile.full_name,
                 'created_at': profile.created_at,
+                'password_setup_endpoint': api_endpoint,
             })
         
         return Response(users_data, status=200)
@@ -272,7 +288,26 @@ class AdminDashboardRequestApprovalView(APIView):
             profile.is_approved = True
             profile.approved_at = timezone.now()
             profile.user.is_active = True
-            message = "Your account has been approved. You can now set your password."
+            
+            # Provide API endpoint information for password setup
+            api_endpoint = f"http://localhost:8000/set-password/{profile.id}/"
+            message = f"""Your account has been approved!
+
+To set your password, make a POST request to: {api_endpoint}
+
+Request Body:
+{{
+    "password": "your_secure_password",
+    "confirm_password": "your_secure_password"
+}}
+
+Password Requirements:
+- At least 8 characters
+- Must contain uppercase and lowercase letters
+- Must contain at least one number
+- Must contain at least one special character
+
+After setting your password, you can login using the /login/ endpoint."""
         else:  # action == 'reject'
             profile.is_rejected = True
             profile.rejected_at = timezone.now()
@@ -342,6 +377,7 @@ class RegisterView(APIView):
         if User.objects.filter(username=username).exists():
             return Response({"error": "Username already in use."}, status=400)
 
+
         # Create user account (inactive until approved)
         user = User.objects.create_user(username=username, email=email)
         user.is_active = False
@@ -375,7 +411,7 @@ class VerifyOTPView(APIView):
     Rate limited to prevent brute force attempts.
     """
     permission_classes = [AllowAny]
-    throttle_classes = [OTPVerifyRateThrottle]
+    # throttle_classes = [OTPVerifyRateThrottle]
 
     @swagger_auto_schema(
         tags=["Auth"],
@@ -514,31 +550,32 @@ class ResetPasswordView(APIView):
 
 class SetPasswordView(APIView):
     """
-    Password setup endpoint for approved users.
+    Password setup API endpoint for approved users.
     
     Allows users to set their initial password after:
     1. Email verification is complete
     2. Admin has approved their account
     
-    The user can only access this endpoint once to set their initial password.
+    POST: Processes the password setup with confirmation
     """
     permission_classes = [AllowAny]
 
     @swagger_auto_schema(
         tags=["Auth"],
         operation_summary="Set initial password",
-        operation_description="Set your password after admin approval",
+        operation_description="Set your password after admin approval with confirmation",
         request_body=PasswordSetSerializer,
         responses={
             200: openapi.Response("Password set successfully"),
+            400: openapi.Response("Password already set or validation error"),
             403: openapi.Response("User not approved/active"),
             404: openapi.Response("User not found")
         }
     )
     def post(self, request, user_id):
-        s = PasswordSetSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        password = s.validated_data['password']
+        serializer = PasswordSetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        password = serializer.validated_data['password']
         
         try:
             profile = UserProfile.objects.select_related('user').get(id=user_id)
@@ -548,6 +585,10 @@ class SetPasswordView(APIView):
         user = profile.user
         if not user.is_active or not profile.is_approved or profile.is_rejected:
             return Response({"error": "User is not approved/active."}, status=403)
+            
+        # Check if password is already set
+        if user.has_usable_password():
+            return Response({"error": "Password has already been set for this account."}, status=400)
 
         user.password = make_password(password)
         user.save(update_fields=["password"])

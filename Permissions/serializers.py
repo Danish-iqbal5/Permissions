@@ -1,16 +1,3 @@
-# from rest_framework import serializers
-# from .models import UserProfile
-
-
-# class UserSerializer(serializers.ModelSerializer):
-#     email = serializers.EmailField(source='user.email', read_only=True)
-#     username = serializers.CharField(source='user.username', read_only=True)
-#     is_active = serializers.BooleanField(source='user.is_active', read_only=True)
- 
-
-#     class Meta:
-#         model = UserProfile
-#         fields = ['id', 'email', 'username', 'is_active', 'full_name', 'phone_number', 'address']
 
 
 
@@ -22,13 +9,12 @@ from .validators import validate_password_strength, validate_username
 
 
 class UserSerializer(serializers.ModelSerializer):
-  username = serializers.CharField(source='user.username')
-  email = serializers.EmailField(source='user.email')
-
-
-class Meta:
-  model = UserProfile
-  fields = ['id', 'username', 'email', 'full_name', 'phone_number', 'address', 'is_verified', 'is_approved', 'approved_at', 'is_rejected', 'rejected_at', 'rejection_reason']
+    username = serializers.CharField(source='user.username')
+    email = serializers.EmailField(source='user.email')
+    
+    class Meta:
+        model = UserProfile
+        fields = ['id', 'username', 'email', 'full_name', 'phone_number', 'address', 'is_verified', 'is_approved', 'approved_at', 'is_rejected', 'rejected_at', 'rejection_reason']
 
 
 
@@ -65,7 +51,7 @@ class ResendOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
 class AdminDecisionSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
+    id = serializers.UUIDField()
     action = serializers.ChoiceField(
         choices=['approve', 'reject'],
         error_messages={
@@ -87,6 +73,14 @@ class AdminDecisionSerializer(serializers.Serializer):
 
 class PasswordSetSerializer(serializers.Serializer):
     password = serializers.CharField(validators=[validate_password_strength])
+    confirm_password = serializers.CharField()
+    
+    def validate(self, data):
+        if data['password'] != data['confirm_password']:
+            raise serializers.ValidationError({
+                "confirm_password": "Password and confirm password do not match."
+            })
+        return data
 
 class ForgotPasswordSerializer(serializers.Serializer):
     """Request a password reset by providing email."""

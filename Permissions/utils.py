@@ -28,19 +28,20 @@ def generate_and_send_otp(to_email):
 def verify_otp(otp_input, otp_hash, otp_created_at, validity_minutes=10):
     """
     Compare input OTP with stored hash and check expiry.
+    Returns True if valid, False otherwise.
     """
     if not otp_hash or not otp_created_at:
-        return False, "No OTP set."
+        return False
 
     # Expiry check
     if timezone.now() - otp_created_at > timezone.timedelta(minutes=validity_minutes):
-        return False, "OTP expired."
+        return False
 
     # Hash check
     if not check_password(otp_input, otp_hash):
-        return False, "Invalid OTP."
+        return False
 
-    return True, "OTP verified."
+    return True
 
 
 # Send password setup email
