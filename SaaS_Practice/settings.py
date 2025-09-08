@@ -9,8 +9,11 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+import os 
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()  # take environment variables from .env.
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -40,6 +43,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'Permissions',
+    'services',
     'drf_yasg',
     'rest_framework_simplejwt.token_blacklist',
 ]
@@ -109,12 +113,19 @@ WSGI_APPLICATION = 'SaaS_Practice.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'saas_db',
+        'USER': 'danish',
+        'PASSWORD': 'admin@123',
+        'HOST': 'localhost',  # Use 'localhost' if running locally, 'db' if using Docker service
+        'PORT': '5432',
     }
 }
+
+
 
 
 # Password validation
