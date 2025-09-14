@@ -44,7 +44,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'Permissions',
     'services',
-    'drf_yasg',
+
     'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -52,25 +52,7 @@ AUTHENTICATION_BACKENDS = [
 'django.contrib.auth.backends.ModelBackend',
 ]
 
-REST_FRAMEWORK = {
-'DEFAULT_AUTHENTICATION_CLASSES': (
-'rest_framework_simplejwt.authentication.JWTAuthentication',
-),
-'DEFAULT_PERMISSION_CLASSES': (
-'rest_framework.permissions.IsAuthenticated',
-),
-'DEFAULT_THROTTLE_CLASSES': [
-'rest_framework.throttling.AnonRateThrottle',
-'rest_framework.throttling.UserRateThrottle',
-],
-'DEFAULT_THROTTLE_RATES': {
-'anon': '50/hour',
-'user': '200/hour',
-'otp': '5/min', # used by custom throttle class name below
-'login': '10/min', # used by custom throttle class name below
-'resend_otp': '3/min', # used by custom throttle class name below
-},
-}
+
 from datetime import timedelta
 SIMPLE_JWT = {
 'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
@@ -169,26 +151,7 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# REST Framework settings
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle'
-    ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/day',      # Anonymous users: 100 requests per day
-        'user': '1000/day',     # Authenticated users: 1000 requests per day
-        'login': '5/minute',    # Login attempts: 5 per minute
-        'otp': '5/minute',      # OTP verification: 5 attempts per minute
-        'resend_otp': '3/minute' # OTP resend: 3 requests per minute
-    }
-}
+
 
 # REST Framework settings
 REST_FRAMEWORK = {
