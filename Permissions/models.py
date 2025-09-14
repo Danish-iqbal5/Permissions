@@ -67,10 +67,10 @@ from django.contrib.auth.models import User
 
 class UserProfile(models.Model):
     USER_TYPE_CHOICES = [
-        ('admin', 'Admin'),
-        ('vendor', 'Vendor'),
-        ('vip_customer', 'VIP Customer'),
-        ('customer', 'Customer'),  
+       ('admin', 'Admin'),
+       ('vendor', 'Vendor'),
+       ('vip_customer', 'VIP Customer'),
+       ('normal_customer', 'Normal Customer'), 
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -107,7 +107,7 @@ class UserProfile(models.Model):
 
     def is_fully_active(self):
         """Check if user can access platform."""
-        if self.user_type == 'customer':
+        if self.user_type == 'normal_customer':
             return self.is_verified
         else:
             return self.is_verified and self.is_approved

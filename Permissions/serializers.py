@@ -1,6 +1,3 @@
-
-
-
 import re
 from rest_framework import serializers
 from django.contrib.auth.models import User
@@ -20,20 +17,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 
-# class RegisterSerializer(serializers.Serializer):
-#     username = serializers.CharField(validators=[validate_username])
-#     email = serializers.EmailField()
-#     full_name = serializers.CharField(min_length=2, max_length=100)
-    
-#     def validate_full_name(self, value):
-#         if not re.match(r'^[a-zA-Z\s]+$', value):
-#             raise serializers.ValidationError(
-#                 "Full name should only contain letters and spaces."
-#             )
-#         return value
-
-from rest_framework import serializers
-
 USER_TYPE_CHOICES = [
     ('customer', 'Customer'),
     ('vip_customer', 'VIP Customer'),
@@ -43,8 +26,7 @@ USER_TYPE_CHOICES = [
 class RegisterSerializer(serializers.Serializer):
     username = serializers.CharField()
     email = serializers.EmailField()
-    full_name = serializers.CharField()
-    user_type = serializers.ChoiceField(choices=USER_TYPE_CHOICES, default='customer')
+    user_type = serializers.ChoiceField(choices=USER_TYPE_CHOICES)
 
 class VerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -86,16 +68,6 @@ class AdminDecisionSerializer(serializers.Serializer):
             )
         return data
 
-# class PasswordSetSerializer(serializers.Serializer):
-#     password = serializers.CharField(validators=[validate_password_strength])
-#     confirm_password = serializers.CharField()
-    
-#     def validate(self, data):
-#         if data['password'] != data['confirm_password']:
-#             raise serializers.ValidationError({
-#                 "confirm_password": "Password and confirm password do not match."
-#             })
-#         return data
 class PasswordSetSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
     confirm_password = serializers.CharField(write_only=True)

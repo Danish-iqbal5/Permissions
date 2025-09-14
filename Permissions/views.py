@@ -28,7 +28,7 @@ from .throttles import (
 )
 from .utils import (
     generate_and_send_otp,
-    send_mail,
+    send_password_setup_email,
     verify_otp,
 )
 
@@ -38,12 +38,7 @@ from .utils import (
 
 
 class ResendOTPView(APIView):
-    """
-    Endpoint for resending OTP to user's email.
-    
-    Allows users to request a new OTP if the previous one expired or was not received.
-    Rate limited to prevent abuse.
-    """
+  
     permission_classes = [AllowAny]
     throttle_classes = [ResendOTPThrottle]
 
@@ -66,33 +61,19 @@ class ResendOTPView(APIView):
         return Response({"message": "OTP resent to your email."}, status=200)
 
 class ApprovedUserTokenObtainPairView(TokenObtainPairView):
-    """
-    Enhanced login endpoint that handles both superusers and regular approved users.
-    
-    Takes a set of user credentials and returns an access and refresh JSON web
-    token pair to prove the authentication of those credentials.
-    
-    Features:
-    - Superusers: Login without profile checks
-    - Regular users: Requires approval and profile verification
-    - Tracks failed login attempts for regular users
-    - Implements temporary account lockouts
-    - Exponential backoff for repeated failures
-    """
+   
     throttle_classes = [LoginRateThrottle]
     
-  
     def post(self, request, *args, **kwargs):
         try:
             user = User.objects.get(username=request.data['username'])
-            
-            # Handle superusers (no profile required)
+            print(user,"user")
             if user.is_superuser:
                 # Attempt login for superuser
                 response = super().post(request, *args, **kwargs)
                 return response
             
-            # Handle regular users (profile required)
+            
             try:
                 profile = user.profile
             except ObjectDoesNotExist:
@@ -100,14 +81,14 @@ class ApprovedUserTokenObtainPairView(TokenObtainPairView):
                     "error": "User profile not found. Please register through the registration endpoint."
                 }, status=404)
             
-            # Check if account is locked
+    
             if profile.account_locked_until and profile.account_locked_until > timezone.now():
                 wait_minutes = int((profile.account_locked_until - timezone.now()).total_seconds() / 60)
                 return Response({
                     "error": f"Account is temporarily locked. Please try again in {wait_minutes} minutes."
                 }, status=403)
             
-            # Check approval status - customers only need verification, others need approval too
+        
             if not profile.is_fully_active() or not user.is_active:
                 if profile.user_type == 'customer':
                     return Response({
@@ -211,120 +192,67 @@ class AdminDashboardRequestApprovalView(APIView):
             return Response({"error": "User already processed"}, status=400)
             
         if action == 'approve':
+            
             profile.is_approved = True
             profile.approved_at = timezone.now()
             profile.user.is_active = True
+            profile.user.save()
+            profile.save(update_fields=['is_approved', 'approved_at'])
             
             # Provide API endpoint information for password setup
-            api_endpoint = f"http://localhost:8000/set-password/{profile.id}/"
-            message = f"""Your account has been approved!
+#             api_endpoint = f"http://localhost:8000/set-password/{profile.id}/"
+#             message = f"""Your account has been approved!
 
-To set your password, make a POST request to: {api_endpoint}
+# To set your password, make a POST request to: {api_endpoint}
 
-Request Body:
-{{
-    "password": "your_secure_password",
-    "confirm_password": "your_secure_password"
-}}
+# Request Body:
+# {{
+#     "password": "your_secure_password",
+#     "confirm_password": "your_secure_password"
+# }}
 
-Password Requirements:
-- At least 8 characters
-- Must contain uppercase and lowercase letters
-- Must contain at least one number
-- Must contain at least one special character
+# Password Requirements:
+# - At least 8 characters
+# - Must contain uppercase and lowercase letters
+# - Must contain at least one number
+# - Must contain at least one special character
 
-After setting your password, you can login using the /login/ endpoint."""
-            send_mail(
-                subject="Account Approved - Set Your Password",
-                message=message,
-                from_email='Danish@Bussines.com',
-                recipient_list=[profile.user.email],
-                fail_silently=False
-            )
-        else:  # action == 'reject'
-            profile.is_rejected = True
-            profile.rejected_at = timezone.now()
-            profile.rejection_reason = rejection_reason
-            message = f"Your account has been rejected. Reason: {rejection_reason}" if rejection_reason else "Your account has been rejected."
+# After setting your password, you can login using the /login/ endpoint."""
+#             send_mail(
+#                 subject="Account Approved - Set Your Password",
+#                 message=message,
+#                 from_email='Danish@Bussines.com',
+#                 recipient_list=[profile.user.email],
+#                 fail_silently=False
+#             )
+#         else:  # action == 'reject'
+#             profile.is_rejected = True
+#             profile.rejected_at = timezone.now()
+#             profile.rejection_reason = rejection_reason
+#             message = f"Your account has been rejected. Reason: {rejection_reason}" if rejection_reason else "Your account has been rejected."
             
-        profile.processed_by = request.user
-        profile.processed_at = timezone.now()
-        profile.user.save()
-        profile.save()
+#         profile.processed_by = request.user
+#         profile.processed_at = timezone.now()
+#         profile.user.save()
+#         profile.save()
         
-        # Send email notification to user
-        send_mail(
-            subject="Account Status Update",
-            message=message,
-            from_email='Danish@Bussines.com',
-            recipient_list=[profile.user.email],
-            fail_silently=False
+#         # Send email notification to user
+#         send_mail(
+#             subject="Account Status Update",
+#             message=message,
+#             from_email='Danish@Bussines.com',
+#             recipient_list=[profile.user.email],
+#             fail_silently=False
+#         )
+        send_password_setup_email(
+            to_email=profile.user.email,
+            set_password_url=f"http://localhost:8000/set-password/{profile.id}/"
         )
-        
         return Response({
             "message": f"User has been {action}d successfully"
         }, status=200)
 
 
-
-
-
-
-
-# Registration Views
-
-
-# class RegisterView(APIView):
-#     """
-#     User registration endpoint.
-    
-#     Creates a new user account and sends an OTP for email verification.
-#     The user will need to:
-#     1. Verify their email using the OTP
-#     2. Wait for admin approval
-#     3. Set their password
-#     before they can log in.
-#     """
-#     permission_classes = [AllowAny]
-
-#     @swagger_auto_schema(
-#         tags=["Auth"],
-#         operation_summary="Register new user",
-#         operation_description="Create a new user account and receive OTP for verification",
-#         request_body=RegisterSerializer,
-#         responses={
-#             201: openapi.Response("OTP sent to email"),
-#             400: openapi.Response("Email or username already in use")
-#         }
-#     )
-#     def post(self, request):
-#         serializer = RegisterSerializer(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-#         username = serializer.validated_data['username']
-#         email = serializer.validated_data['email']
-#         full_name = serializer.validated_data['full_name']
-
-#         # Check for existing users
-#         if User.objects.filter(email=email).exists():
-#             return Response({"error": "Email already in use."}, status=400)
-#         if User.objects.filter(username=username).exists():
-#             return Response({"error": "Username already in use."}, status=400)
-
-
-#         # Create user account (inactive until approved)
-#         user = User.objects.create_user(username=username, email=email)
-#         user.is_active = False
-#         user.save()
-
-#         # Create user profile and send OTP
-#         profile = UserProfile.objects.create(user=user, full_name=full_name)
-#         otp_hash, otp_created_at = generate_and_send_otp(profile.user.email)
-#         profile.otp_hash = otp_hash
-#         profile.otp_created_at = otp_created_at
-#         profile.save(update_fields=["otp_hash", "otp_created_at"])
-
-#         return Response({"message": "OTP sent to your email."}, status=201)
-# views.py (inside your RegisterView)
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -336,10 +264,10 @@ class RegisterView(APIView):
 
         username = serializer.validated_data['username']
         email = serializer.validated_data['email']
-        full_name = serializer.validated_data['full_name']
-        user_type = serializer.validated_data.get('user_type', 'customer')
+        user_type = serializer.validated_data.get('user_type')
+        
 
-        # Check for existing users
+    
         if User.objects.filter(email=email).exists():
             return Response({"error": "Email already in use."}, status=400)
         if User.objects.filter(username=username).exists():
@@ -350,7 +278,6 @@ class RegisterView(APIView):
         
         profile = UserProfile.objects.create(
             user=user,
-            full_name=full_name,
             user_type=user_type
         )
 
@@ -360,7 +287,13 @@ class RegisterView(APIView):
             user.save()
             profile.save(update_fields=['is_approved'])
 
-        
+        if user_type in ['vendor', 'vip_customer']:
+            profile.is_approved = False
+            user.is_active = False
+            user.save()
+            profile.save(update_fields=['is_approved'])
+
+
         otp_hash, otp_created_at = generate_and_send_otp(email)
         profile.otp_hash = otp_hash
         profile.otp_created_at = otp_created_at
@@ -371,7 +304,7 @@ class RegisterView(APIView):
 
 
 
-# Verification Views
+
 
 
 class VerifyOTPView(APIView):
@@ -415,7 +348,6 @@ class VerifyOTPView(APIView):
 
 
 
-# Password Management Views
 
 class ForgotPasswordView(APIView):
   
