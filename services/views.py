@@ -62,6 +62,10 @@ class VendorProductsView(APIView):
         except:
             return Response({"error": "User profile not found"}, status=404)
         
+        if not request.data.vendorname:
+            return Response({"error": "Vendor name is required"}, status=400)
+        
+        
         serializer = ProductCreateSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(vendor=profile)
