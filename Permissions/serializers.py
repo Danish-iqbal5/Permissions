@@ -6,6 +6,7 @@ from .validators import validate_password_strength, validate_username
 from django.contrib.auth.password_validation import validate_password
 
 
+
 class UserSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username')
     email = serializers.EmailField(source='user.email')
@@ -89,5 +90,4 @@ class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=6)
     new_password = serializers.CharField(min_length=8)
-
 

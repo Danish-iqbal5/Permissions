@@ -1,4 +1,4 @@
-
+import traceback
 from datetime import timedelta
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
@@ -63,11 +63,14 @@ class ResendOTPView(APIView):
 class ApprovedUserTokenObtainPairView(TokenObtainPairView):
    
     throttle_classes = [LoginRateThrottle]
-    
+
+
     def post(self, request, *args, **kwargs):
         try:
             user = User.objects.get(username=request.data['username'])
-            print(user,"user")
+
+       
+
             if user.is_superuser:
                 # Attempt login for superuser
                 response = super().post(request, *args, **kwargs)
@@ -118,10 +121,13 @@ class ApprovedUserTokenObtainPairView(TokenObtainPairView):
                 "error": "User not found"
             }, status=404)
         except Exception as e:
-            # Handle other exceptions (like invalid token)
-            return Response({
-                "error": "An error occurred during login."
-            }, status=400)
+     
+         traceback_str = ''.join(traceback.format_exception(None, e, e.__traceback__))
+         print("LOGIN ERROR:\n", traceback_str)
+         return Response({
+        "error": str(e)  # Use this temporarily for debugging only
+    }, status=400)
+
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -199,51 +205,7 @@ class AdminDashboardRequestApprovalView(APIView):
             profile.user.save()
             profile.save(update_fields=['is_approved', 'approved_at'])
             
-            # Provide API endpoint information for password setup
-#             api_endpoint = f"http://localhost:8000/set-password/{profile.id}/"
-#             message = f"""Your account has been approved!
 
-# To set your password, make a POST request to: {api_endpoint}
-
-# Request Body:
-# {{
-#     "password": "your_secure_password",
-#     "confirm_password": "your_secure_password"
-# }}
-
-# Password Requirements:
-# - At least 8 characters
-# - Must contain uppercase and lowercase letters
-# - Must contain at least one number
-# - Must contain at least one special character
-
-# After setting your password, you can login using the /login/ endpoint."""
-#             send_mail(
-#                 subject="Account Approved - Set Your Password",
-#                 message=message,
-#                 from_email='Danish@Bussines.com',
-#                 recipient_list=[profile.user.email],
-#                 fail_silently=False
-#             )
-#         else:  # action == 'reject'
-#             profile.is_rejected = True
-#             profile.rejected_at = timezone.now()
-#             profile.rejection_reason = rejection_reason
-#             message = f"Your account has been rejected. Reason: {rejection_reason}" if rejection_reason else "Your account has been rejected."
-            
-#         profile.processed_by = request.user
-#         profile.processed_at = timezone.now()
-#         profile.user.save()
-#         profile.save()
-        
-#         # Send email notification to user
-#         send_mail(
-#             subject="Account Status Update",
-#             message=message,
-#             from_email='Danish@Bussines.com',
-#             recipient_list=[profile.user.email],
-#             fail_silently=False
-#         )
         send_password_setup_email(
             to_email=profile.user.email,
             set_password_url=f"http://localhost:8000/set-password/{profile.id}/"

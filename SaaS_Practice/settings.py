@@ -44,7 +44,6 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'Permissions',
     'services',
-
     'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -102,16 +101,13 @@ DATABASES = {
         'NAME': 'saas_db',
         'USER': 'danish',
         'PASSWORD': 'admin@123',
-        'HOST': 'localhost',  # Use 'localhost' if running locally, 'db' if using Docker service
+        'HOST': 'localhost',  
         'PORT': '5432',
     }
 }
 
 
 
-
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
