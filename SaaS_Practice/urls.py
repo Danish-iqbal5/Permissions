@@ -28,6 +28,6 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('Permissions.urls')),
+    path('', include('authentication.urls')),
     path('Products/', include('services.urls')),
 ]

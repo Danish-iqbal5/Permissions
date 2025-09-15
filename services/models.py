@@ -1,5 +1,5 @@
 from django.db import models
-from Permissions.models import UserProfile
+from authentication.models import UserProfile
 import uuid
 
 class Product(models.Model):
@@ -24,9 +24,10 @@ class Cart(models.Model):
 
     @property
     def total_price(self):
-        if UserProfile.user_type == 'vip_customer':
-            return sum(item.total_price * 0.9 for item in self.items.all())  
-        return sum(item.total_price for item in self.items.all())
+     if self.user.user_type == 'vip_customer':
+        return sum(item.product.whole_sale_price * item.quantity * 0.9 for item in self.items.all())
+     return sum(item.total_price for item in self.items.all())
+
     
 class CartItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -2,9 +2,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from .models import Product , Cart, CartItem
-from .serializers import ProductSerializer, ProductCreateSerializer ,CartItemSerializer
-from Permissions.models import UserProfile
+from .models import Product , Cart, CartItem 
+from .serializers import ProductSerializer, ProductCreateSerializer ,CartItemSerializer , CartSerializer
+from authentication.models import UserProfile
 
 class ProductsListView(APIView):
     permission_classes = [AllowAny]
@@ -131,7 +131,7 @@ class CartView(APIView):
             return Response({"error": "User profile not found"}, status=404)
         
         cart, created = Cart.objects.get_or_create(user=profile)
-        serializer = CartItemSerializer(cart)
+        serializer = CartSerializer(cart)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def post(self, request):
