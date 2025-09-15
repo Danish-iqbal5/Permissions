@@ -2,8 +2,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from .models import Product
-from .serializers import ProductSerializer, ProductCreateSerializer
+from .models import Product , Cart, CartItem
+from .serializers import ProductSerializer, ProductCreateSerializer ,CartItemSerializer
 from Permissions.models import UserProfile
 
 class ProductsListView(APIView):
@@ -117,3 +117,53 @@ class VendorProductDetailView(APIView):
         
         product.delete()
         return Response({"message": "Product deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+    
+
+class CartView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            profile = request.user.profile
+            if profile.user_type not in ['customer', 'vip_customer'] or not profile.is_fully_active():
+                return Response({"error": "Customer access required"}, status=403)
+        except:
+            return Response({"error": "User profile not found"}, status=404)
+        
+        cart, created = Cart.objects.get_or_create(user=profile)
+        serializer = CartItemSerializer(cart)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def post(self, request):
+        try:
+            profile = request.user.profile
+            if profile.user_type not in ['customer', 'vip_customer'] or not profile.is_fully_active():
+                return Response({"error": "Customer access required"}, status=403)
+        except:
+            return Response({"error": "User profile not found"}, status=404)
+        
+        cart, created = Cart.objects.get_or_create(user=profile)
+        serializer = CartItemSerializer(data=request.data)
+        if serializer.is_valid():
+            product_id = serializer.validated_data['product'].id
+            quantity = serializer.validated_data['quantity']
+            
+            try:
+                product = Product.objects.get(id=product_id)
+                if product.stock_quantity < quantity:
+                    return Response({"error": "Insufficient stock"}, status=400)
+                
+                cart_item, item_created = CartItem.objects.get_or_create(cart=cart, product=product)
+                if not item_created:
+                    cart_item.quantity += quantity
+                else:
+                    cart_item.quantity = quantity
+                cart_item.save()
+                
+                product.stock_quantity -= quantity
+                product.save()
+                
+                return Response(CartItemSerializer(cart_item).data, status=status.HTTP_201_CREATED)
+            except Product.DoesNotExist:
+                return Response({"error": "Product not found"}, status=404)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)    

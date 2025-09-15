@@ -21,3 +21,11 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Stock quantity cannot be negative")
         return data
 
+class CartItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_price = serializers.DecimalField(source='product.retail_price', max_digits=10, decimal_places=2, read_only=True)
+    total_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    
+    class Meta:
+        model = Product
+        fields = ['id', 'product_name', 'product_price', 'quantity', 'total_price']
