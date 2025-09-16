@@ -18,9 +18,9 @@ class Product(models.Model):
         return self.name
 
     def get_price_for_user(self, user):
-        """Get appropriate price based on user type"""
+    
         if user.user_type == 'vip_customer':
-            return self.whole_sale_price * 0.9  # 10% discount on wholesale
+            return self.whole_sale_price 
         return self.retail_price
 
 

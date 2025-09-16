@@ -97,7 +97,6 @@ class VendorProductDetailView(APIView):
 
 
 class CartView(APIView):
-    """Shopping cart management"""
     permission_classes = [IsAuthenticated]
     
     def get_user_profile(self, request):
