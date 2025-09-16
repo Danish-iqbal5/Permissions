@@ -2,86 +2,61 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from .models import Product , Cart, CartItem 
-from .serializers import ProductSerializer, ProductCreateSerializer ,CartItemSerializer , CartSerializer
-from authentication.models import UserProfile
+from .models import Product, Cart, CartItem 
+from .serializers import ProductSerializer, ProductCreateSerializer, CartItemSerializer, CartSerializer
+from authentication.models import User
 
 class ProductsListView(APIView):
     permission_classes = [AllowAny]
     
     def get(self, request):
-        products = Product.objects.all()
-        serializer = ProductSerializer(products, many=True)
-        products_data = serializer.data
-        
-        user_type = 'customer'
-        if request.user.is_authenticated:
-            try:
-                profile = request.user.profile
-                user_type = profile.user_type
-                if not profile.is_fully_active():
-                    user_type = 'customer'
-            except:
-                user_type = 'customer'
-        
-        for product in products_data:
-            if user_type == 'vip_customer':
-                product['price'] = product['whole_sale_price']
-                product['price_type'] = 'wholesale'
-            else:
-                product['price'] = product['retail_price']
-                product['price_type'] = 'retail'
-            
-            if user_type not in ['vip_customer', 'vendor']:
-                product.pop('whole_sale_price', None)
-        
-        return Response(products_data, status=status.HTTP_200_OK)
+        products = Product.objects.filter(is_active=True, stock_quantity__gt=0)
+        serializer = ProductSerializer(products, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 class VendorProductsView(APIView):
+    """Vendor product management"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        
         try:
-            profile = request.user.profile
-            if profile.user_type != 'vendor' or not profile.is_fully_active():
+            user = request.user
+            if user.user_type != 'vendor' or not user.is_fully_active():
                 return Response({"error": "Vendor access required"}, status=403)
         except:
             return Response({"error": "User profile not found"}, status=404)
         
-        products = Product.objects.filter(vendor=profile)
+        products = Product.objects.filter(vendor=user)
         serializer = ProductSerializer(products, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def post(self, request):
-    
         try:
-            profile = request.user.profile
-            if profile.user_type != 'vendor' or not profile.is_fully_active():
+            user = request.user
+            if user.user_type != 'vendor' or not user.is_fully_active():
                 return Response({"error": "Vendor access required"}, status=403)
         except:
             return Response({"error": "User profile not found"}, status=404)
         
-        if not request.data.vendorname:
-            return Response({"error": "Vendor name is required"}, status=400)
-        
-        
         serializer = ProductCreateSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save(vendor=profile)
+            serializer.save(vendor=user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 class VendorProductDetailView(APIView):
+    """Individual product management for vendors"""
     permission_classes = [IsAuthenticated]
     
     def get_object(self, request, product_id):
         try:
-            profile = request.user.profile
-            if profile.user_type != 'vendor' or not profile.is_fully_active():
+            user = request.user
+            if user.user_type != 'vendor' or not user.is_fully_active():
                 return None, Response({"error": "Vendor access required"}, status=403)
             
-            product = Product.objects.get(id=product_id, vendor=profile)
+            product = Product.objects.get(id=product_id, vendor=user)
             return product, None
         except Product.DoesNotExist:
             return None, Response({"error": "Product not found"}, status=404)
@@ -89,7 +64,6 @@ class VendorProductDetailView(APIView):
             return None, Response({"error": "User profile not found"}, status=404)
     
     def get(self, request, product_id):
-    
         product, error_response = self.get_object(request, product_id)
         if error_response:
             return error_response
@@ -98,7 +72,6 @@ class VendorProductDetailView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def put(self, request, product_id):
-    
         product, error_response = self.get_object(request, product_id)
         if error_response:
             return error_response
@@ -110,60 +83,78 @@ class VendorProductDetailView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     def delete(self, request, product_id):
-        
         product, error_response = self.get_object(request, product_id)
         if error_response:
             return error_response
         
-        product.delete()
-        return Response({"message": "Product deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-    
+        # Soft delete - just mark as inactive
+        product.is_active = False
+        product.save()
+        return Response({"message": "Product deactivated successfully"}, status=status.HTTP_200_OK)
+
 
 class CartView(APIView):
+    """Shopping cart management"""
     permission_classes = [IsAuthenticated]
     
-    def get(self, request):
+    def get_user_profile(self, request):
         try:
-            profile = request.user.profile
-            if profile.user_type not in ['customer', 'vip_customer'] or not profile.is_fully_active():
-                return Response({"error": "Customer access required"}, status=403)
+            user = request.user
+            if user.user_type not in ['normal_customer', 'vip_customer'] or not user.is_fully_active():
+                return None, Response({"error": "Customer access required"}, status=403)
+            return user, None
         except:
-            return Response({"error": "User profile not found"}, status=404)
+            return None, Response({"error": "User profile not found"}, status=404)
+    
+    def get(self, request):
+        user, error_response = self.get_user_profile(request)
+        if error_response:
+            return error_response
         
-        cart, created = Cart.objects.get_or_create(user=profile)
+        cart, created = Cart.objects.get_or_create(user=user)
         serializer = CartSerializer(cart)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def post(self, request):
-        try:
-            profile = request.user.profile
-            if profile.user_type not in ['customer', 'vip_customer'] or not profile.is_fully_active():
-                return Response({"error": "Customer access required"}, status=403)
-        except:
-            return Response({"error": "User profile not found"}, status=404)
+        """Add item to cart"""
+        user, error_response = self.get_user_profile(request)
+        if error_response:
+            return error_response
         
-        cart, created = Cart.objects.get_or_create(user=profile)
+        cart, created = Cart.objects.get_or_create(user=user)
+        
         serializer = CartItemSerializer(data=request.data)
         if serializer.is_valid():
-            product_id = serializer.validated_data['product'].id
+            product_id = serializer.validated_data['product_id']
             quantity = serializer.validated_data['quantity']
             
             try:
-                product = Product.objects.get(id=product_id)
+                product = Product.objects.get(id=product_id, is_active=True)
+                
+                # Check stock
                 if product.stock_quantity < quantity:
                     return Response({"error": "Insufficient stock"}, status=400)
                 
-                cart_item, item_created = CartItem.objects.get_or_create(cart=cart, product=product)
-                if not item_created:
-                    cart_item.quantity += quantity
-                else:
-                    cart_item.quantity = quantity
-                cart_item.save()
+                # Get or create cart item
+                cart_item, item_created = CartItem.objects.get_or_create(
+                    cart=cart, 
+                    product=product,
+                    defaults={'quantity': quantity}
+                )
                 
-                product.stock_quantity -= quantity
-                product.save()
+                if not item_created:
+                    # Update quantity if item already exists
+                    new_quantity = cart_item.quantity + quantity
+                    if product.stock_quantity < new_quantity:
+                        return Response({
+                            "error": f"Cannot add {quantity} more. Only {product.stock_quantity - cart_item.quantity} available"
+                        }, status=400)
+                    cart_item.quantity = new_quantity
+                    cart_item.save()
                 
                 return Response(CartItemSerializer(cart_item).data, status=status.HTTP_201_CREATED)
+                
             except Product.DoesNotExist:
                 return Response({"error": "Product not found"}, status=404)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)    
+                
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

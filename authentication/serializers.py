@@ -1,33 +1,28 @@
 import re
 from rest_framework import serializers
-from django.contrib.auth.models import User
-from .models import UserProfile
+from .models import User
 from .validators import validate_password_strength, validate_username
 from django.contrib.auth.password_validation import validate_password
 
 
-
 class UserSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source='user.username')
-    email = serializers.EmailField(source='user.email')
-    
     class Meta:
-        model = UserProfile
-        fields = ['id', 'username', 'email', 'full_name', 'phone_number', 'address', 'is_verified', 'is_approved', 'approved_at', 'is_rejected', 'rejected_at', 'rejection_reason']
-
-
+        model = User
+        fields = ['id', 'email', 'full_name', 'phone_number', 'address', 'user_type',
+                 'is_verified', 'is_approved', 'approved_at', 'is_rejected', 
+                 'rejected_at', 'rejection_reason']
 
 
 USER_TYPE_CHOICES = [
-    ('customer', 'Customer'),
+    ('normal_customer', 'Normal Customer'),
     ('vip_customer', 'VIP Customer'),
     ('vendor', 'Vendor'),
 ]
 
 class RegisterSerializer(serializers.Serializer):
-    username = serializers.CharField()
     email = serializers.EmailField()
-    user_type = serializers.ChoiceField(choices=USER_TYPE_CHOICES)
+    full_name = serializers.CharField(max_length=255)
+    user_type = serializers.ChoiceField(choices=USER_TYPE_CHOICES, default='normal_customer')
 
 class VerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -81,6 +76,7 @@ class PasswordSetSerializer(serializers.Serializer):
         if data['password'] != data['confirm_password']:
             raise serializers.ValidationError("Passwords do not match.")
         return data
+
 class ForgotPasswordSerializer(serializers.Serializer):
     """Request a password reset by providing email."""
     email = serializers.EmailField()
@@ -90,4 +86,3 @@ class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=6)
     new_password = serializers.CharField(min_length=8)
-

@@ -19,6 +19,9 @@ load_dotenv()  # take environment variables from .env.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+AUTH_USER_MODEL = 'authentication.User'
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -193,4 +196,6 @@ EMAIL_HOST_PASSWORD = '555e74f2fe9394'
 EMAIL_USE_TLS = True
 
 DEFAULT_FROM_EMAIL = 'test@example.com'
+
+
 

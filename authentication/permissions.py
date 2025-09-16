@@ -7,9 +7,44 @@ class IsApprovedAndActive(BasePermission):
         user = request.user
         if not user or not user.is_authenticated:
             return False
-        try:
-            profile = user.profile
-        except Exception:
+
+        return user.is_active and user.is_approved and not user.is_rejected and user.is_verified
+
+
+class IsVendor(BasePermission):
+    message = "Vendor access required."
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
             return False
 
-        return user.is_active and profile.is_approved and not profile.is_rejected
+        return (user.user_type == 'vendor' and 
+                user.is_fully_active() and 
+                user.is_active)
+
+
+class IsCustomer(BasePermission):
+    message = "Customer access required."
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+
+        return (user.user_type in ['normal_customer', 'vip_customer'] and 
+                user.is_fully_active() and 
+                user.is_active)
+
+
+class IsVIPCustomer(BasePermission):
+    message = "VIP Customer access required."
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+
+        return (user.user_type == 'vip_customer' and 
+                user.is_fully_active() and 
+                user.is_active)
