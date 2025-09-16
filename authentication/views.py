@@ -61,23 +61,23 @@ class ApprovedUserTokenObtainPairView(TokenObtainPairView):
 
     def post(self, request, *args, **kwargs):
         try:
-            # Since we're using email as username, check by email
+            
             email = request.data.get('username') or request.data.get('email')
             user = User.objects.get(email=email)
 
             if user.is_superuser:
-                # Attempt login for superuser
+            
                 response = super().post(request, *args, **kwargs)
                 return response
             
-            # Check account lockout
+            
             if user.account_locked_until and user.account_locked_until > timezone.now():
                 wait_minutes = int((user.account_locked_until - timezone.now()).total_seconds() / 60)
                 return Response({
                     "error": f"Account is temporarily locked. Please try again in {wait_minutes} minutes."
                 }, status=403)
             
-            # Check if user is fully active
+            
             if not user.is_fully_active() or not user.is_active:
                 if user.user_type == 'normal_customer':
                     return Response({
@@ -88,15 +88,15 @@ class ApprovedUserTokenObtainPairView(TokenObtainPairView):
                         "error": "Your account is not yet approved or is inactive."
                     }, status=403)
                 
-            # Attempt login
+            
             response = super().post(request, *args, **kwargs)
             
             if response.status_code == 200:
-                # Successful login - reset failed attempts
+                
                 user.reset_login_attempts()
                 return response
             else:
-                # Failed login - increment counter
+                
                 user.increment_login_attempts()
                 return Response({
                     "error": "Invalid credentials."
@@ -138,7 +138,7 @@ class AdminDashboardRequestApprovalView(APIView):
         if not request.user.is_staff:
             return Response({"error": "Admin access required"}, status=403)
         
-        # Get pending users for approval
+        
         pending_users = User.objects.filter(
             is_verified=True,
             is_approved=False,
@@ -184,7 +184,7 @@ class AdminDashboardRequestApprovalView(APIView):
             user.processed_at = timezone.now()
             user.save(update_fields=['is_approved', 'approved_at', 'is_active', 'processed_by', 'processed_at'])
             
-            # Send password setup email
+            
             send_password_setup_email(
                 to_email=user.email,
                 set_password_url=f"http://localhost:8000/set-password/{user.id}/"
@@ -213,28 +213,28 @@ class RegisterView(APIView):
         full_name = serializer.validated_data['full_name']
         user_type = serializer.validated_data.get('user_type', 'normal_customer')
         
-        # Check if email already exists
+        
         if User.objects.filter(email=email).exists():
             return Response({"error": "Email already in use."}, status=400)
 
-        # Create user
+    
         user = User.objects.create_user(
             email=email,
             full_name=full_name,
             user_type=user_type
         )
 
-        # Set approval status based on user type
+        
         if user_type == 'normal_customer':
             user.is_approved = True
             user.is_active = True
-        else:  # vendor, vip_customer
+        else:
             user.is_approved = False
             user.is_active = False
             
         user.save(update_fields=['is_approved', 'is_active'])
 
-        # Send OTP
+        
         otp_hash, otp_created_at = generate_and_send_otp(email)
         user.otp_hash = otp_hash
         user.otp_created_at = otp_created_at
