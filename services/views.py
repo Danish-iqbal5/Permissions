@@ -109,7 +109,7 @@ class CartView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def post(self, request):
-        """Add item to cart"""
+        
         user, error_response = self.get_user_profile(request)
         if error_response:
             return error_response
@@ -158,29 +158,29 @@ class CartView(APIView):
 
 
 class ProductListView(generics.ListAPIView):
-    """List all active products - accessible to everyone"""
+   
     queryset = Product.objects.filter(is_active=True, stock_quantity__gt=0)
     serializer_class = ProductSerializer
     permission_classes = []
 
 
 class VendorProductListCreateView(generics.ListCreateAPIView):
-    """List vendor's products and create new products"""
+   
     serializer_class = ProductSerializer
     permission_classes = [IsVendor]
     
     def get_queryset(self):
-        """Filter products by current vendor"""
+    
         return Product.objects.filter(vendor=self.request.user)
     
     def get_serializer_class(self):
-        """Use different serializer for create"""
+       
         if self.request.method == 'POST':
             return ProductCreateSerializer
         return ProductSerializer
     
     def perform_create(self, serializer):
-        """Set vendor as current user"""
+        
         serializer.save(vendor=self.request.user)
 
 
