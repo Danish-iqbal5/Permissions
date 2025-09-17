@@ -9,17 +9,9 @@ from rest_framework import generics, status
 from django.shortcuts import get_object_or_404
 from authentication.permissions import IsVendor
 
-# class ProductsListView(APIView):
-#     permission_classes = [AllowAny]
-    
-#     def get(self, request):
-#         products = Product.objects.filter(is_active=True, stock_quantity__gt=0)
-#         serializer = ProductSerializer(products, many=True, context={'request': request})
-#         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class VendorProductsView(APIView):
-    """Vendor product management"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
@@ -50,7 +42,6 @@ class VendorProductsView(APIView):
 
 
 class VendorProductDetailView(APIView):
-    """Individual product management for vendors"""
     permission_classes = [IsAuthenticated]
     
     def get_object(self, request, product_id):
@@ -90,7 +81,7 @@ class VendorProductDetailView(APIView):
         if error_response:
             return error_response
         
-        # Soft delete - just mark as inactive
+        
         product.is_active = False
         product.save()
         return Response({"message": "Product deactivated successfully"}, status=status.HTTP_200_OK)
@@ -133,11 +124,11 @@ class CartView(APIView):
             try:
                 product = Product.objects.get(id=product_id, is_active=True)
                 
-                # Check stock
+        
                 if product.stock_quantity < quantity:
                     return Response({"error": "Insufficient stock"}, status=400)
                 
-                # Get or create cart item
+                
                 cart_item, item_created = CartItem.objects.get_or_create(
                     cart=cart, 
                     product=product,
@@ -145,7 +136,7 @@ class CartView(APIView):
                 )
                 
                 if not item_created:
-                    # Update quantity if item already exists
+                    
                     new_quantity = cart_item.quantity + quantity
                     if product.stock_quantity < new_quantity:
                         return Response({
@@ -194,28 +185,28 @@ class VendorProductListCreateView(generics.ListCreateAPIView):
 
 
 class VendorProductDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """Retrieve, update, or delete a vendor's product"""
+    
     serializer_class = ProductCreateSerializer
     permission_classes = [IsVendor]
     lookup_field = 'id'
     
     def get_queryset(self):
-        """Filter products by current vendor"""
+    
         return Product.objects.filter(vendor=self.request.user)
     
     def get_serializer_class(self):
-        """Use ProductSerializer for GET, ProductCreateSerializer for PUT/PATCH"""
+        
         if self.request.method == 'GET':
             return ProductSerializer
         return ProductCreateSerializer
     
     def perform_destroy(self, instance):
-        """Soft delete - mark as inactive instead of deleting"""
+       
         instance.is_active = False
         instance.save()
     
     def destroy(self, request, *args, **kwargs):
-        """Override destroy to return custom message"""
+       
         instance = self.get_object()
         self.perform_destroy(instance)
         return Response(
