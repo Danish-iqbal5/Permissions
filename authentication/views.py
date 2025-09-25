@@ -56,28 +56,33 @@ class ResendOTPView(APIView):
         return Response({"message": "OTP resent to your email."}, status=200)
 
 
+
 class ApprovedUserTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [LoginRateThrottle]
+    username_field = 'email'
 
     def post(self, request, *args, **kwargs):
         try:
-            
             email = request.data.get('username') or request.data.get('email')
             user = User.objects.get(email=email)
 
+            
             if user.is_superuser:
-            
                 response = super().post(request, *args, **kwargs)
+                if response.status_code == 200:
+                    response.data['user_type'] = "superuser"
+                    response.data['email'] = user.email
+                    response.data['full_name'] = user.get_full_name() if hasattr(user, 'get_full_name') else user.username
                 return response
-            
+
             
             if user.account_locked_until and user.account_locked_until > timezone.now():
                 wait_minutes = int((user.account_locked_until - timezone.now()).total_seconds() / 60)
                 return Response({
                     "error": f"Account is temporarily locked. Please try again in {wait_minutes} minutes."
                 }, status=403)
-            
-            
+
+        
             if not user.is_fully_active() or not user.is_active:
                 if user.user_type == 'normal_customer':
                     return Response({
@@ -87,21 +92,25 @@ class ApprovedUserTokenObtainPairView(TokenObtainPairView):
                     return Response({
                         "error": "Your account is not yet approved or is inactive."
                     }, status=403)
-                
+
             
             response = super().post(request, *args, **kwargs)
-            
+
             if response.status_code == 200:
-                
                 user.reset_login_attempts()
+
+                
+                response.data['user_type'] = user.user_type
+                response.data['email'] = user.email
+                response.data['full_name'] = user.get_full_name() if hasattr(user, 'get_full_name') else user.username
+
                 return response
             else:
-                
                 user.increment_login_attempts()
                 return Response({
                     "error": "Invalid credentials."
                 }, status=401)
-                
+
         except User.DoesNotExist:
             return Response({
                 "error": "User not found"
