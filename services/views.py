@@ -8,6 +8,10 @@ from authentication.models import User
 from rest_framework import generics, status
 from django.shortcuts import get_object_or_404
 from authentication.permissions import IsVendor
+from django.core.cache import cache
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+from Notifications.models import Notification
 
 
 
@@ -157,11 +161,24 @@ class CartView(APIView):
 
 
 
-class ProductListView(generics.ListAPIView):
+# class ProductListView(generics.ListAPIView):
    
-    queryset = Product.objects.filter(is_active=True, stock_quantity__gt=0)
-    serializer_class = ProductSerializer
+#     queryset = Product.objects.filter(is_active=True, stock_quantity__gt=0)
+#     serializer_class = ProductSerializer
+#     permission_classes = []
+
+class ProductListView(APIView):
     permission_classes = []
+
+    def get(self, request):
+        cached_data = cache.get("product_list")
+        if cached_data:
+            return Response(cached_data, status=status.HTTP_200_OK)
+
+        products = Product.objects.filter(is_active=True, stock_quantity__gt=0)
+        serializer = ProductSerializer(products, many=True)
+        cache.set("product_list", serializer.data, timeout=300)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class VendorProductListCreateView(generics.ListCreateAPIView):
@@ -213,3 +230,17 @@ class VendorProductDetailView(generics.RetrieveUpdateDestroyAPIView):
             {"message": "Product deactivated successfully"}, 
             status=status.HTTP_200_OK
         )
+
+
+
+
+
+def send_notification_to_user(user_id, message):
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"user_{user_id}",
+        {
+            "type": "notify",
+            "message": message,
+        }
+    )

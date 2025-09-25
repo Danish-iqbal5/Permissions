@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os 
 from pathlib import Path
 from dotenv import load_dotenv
-
+from corsheaders.defaults import default_headers
 load_dotenv()  # take environment variables from .env.
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -48,6 +48,9 @@ INSTALLED_APPS = [
     'authentication',
     'services',
     'rest_framework_simplejwt.token_blacklist',
+    "channels",
+    'Notifications',
+    'corsheaders',
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -65,6 +68,7 @@ SIMPLE_JWT = {
 }
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -112,14 +116,23 @@ DATABASES = {
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://redis:6379/1",  # redis://<service_name>:<port>/<db_number>
+        "LOCATION": os.getenv("REDIS_URL", "redis://127.0.0.1:6379/1"),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     }
 }
 
+ASGI_APPLICATION = "SaaS_Practice.asgi.application"
 
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
 
 
 
@@ -209,4 +222,12 @@ EMAIL_USE_TLS = True
 DEFAULT_FROM_EMAIL = 'test@example.com'
 
 
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5175",
+]
+ 
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'Authorization',
+]
+CORS_ALLOW_CREDENTIALS = True
 
