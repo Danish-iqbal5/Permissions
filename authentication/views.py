@@ -280,6 +280,8 @@ class VerifyOTPView(APIView):
         message = "OTP verified successfully."
         if user.user_type == 'normal_customer':
             message += f" You can now set your password at: /set-password/{user.id}/"
+
+            send_password_setup_email(user.email , message  )
         else:
             message += " Please wait for admin approval."
             

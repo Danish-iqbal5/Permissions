@@ -223,13 +223,17 @@ class VendorProductDetailView(generics.RetrieveUpdateDestroyAPIView):
         instance.save()
     
     def destroy(self, request, *args, **kwargs):
-       
-        instance = self.get_object()
-        self.perform_destroy(instance)
-        return Response(
-            {"message": "Product deactivated successfully"}, 
-            status=status.HTTP_200_OK
-        )
+    # Get the product instance to be deleted
+     instance = self.get_object()
+    
+    # Perform the deletion
+     instance.delete()  # This deletes the object from the database entirely
+    
+     return Response(
+        {"message": "Product deleted successfully"}, 
+        status=status.HTTP_204_NO_CONTENT  # HTTP 204 No Content for successful deletion
+    )
+
 
 
 

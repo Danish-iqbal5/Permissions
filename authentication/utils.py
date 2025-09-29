@@ -16,7 +16,7 @@ def generate_and_send_otp(to_email):
     send_mail(
         subject,
         message,
-        'Danish@Bussines.com',
+        'ghostisog404@gmail.com',
         [to_email],
         fail_silently=False,
     )
@@ -52,7 +52,7 @@ def send_password_setup_email(to_email, set_password_url):
     send_mail(
         subject,
         message,
-        'Danish@Bussines.com',
+        'ghostisog404@gmail.com',
         [to_email],
         fail_silently=False,
     )

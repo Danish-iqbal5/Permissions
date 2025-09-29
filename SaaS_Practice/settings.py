@@ -211,15 +211,17 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
-
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.mailtrap.io'
-EMAIL_PORT = 2525  # You can also use 587 or 465
-EMAIL_HOST_USER = '5455632d72e11c'
-EMAIL_HOST_PASSWORD = '555e74f2fe9394'
-EMAIL_USE_TLS = True
+EMAIL_HOST = 'sandbox.smtp.mailtrap.io'
+EMAIL_PORT = 587  # You could also use 2525, 25, or 465 depending on firewall
+EMAIL_USE_TLS = True  # STARTTLS is supported and recommended
 
-DEFAULT_FROM_EMAIL = 'test@example.com'
+EMAIL_HOST_USER = 'c3b317a5fe6450'       # Your Mailtrap SMTP username
+EMAIL_HOST_PASSWORD = '954f855a174a0f'   # Your Mailtrap SMTP password
+
+DEFAULT_FROM_EMAIL = 'noreply@example.com'  # Can be anything for testing
+
+
 
 
 CORS_ALLOWED_ORIGINS = [
