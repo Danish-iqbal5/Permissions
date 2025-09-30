@@ -248,3 +248,108 @@ def send_notification_to_user(user_id, message):
             "message": message,
         }
     )
+
+
+
+
+
+class ManageCartProducts(APIView ):
+    permission_classes = [IsAuthenticated]
+
+    def _get_customer_user(self, request):
+        try:
+            user = request.user
+            if user.user_type not in ['normal_customer', 'vip_customer'] or not user.is_fully_active():
+                return None, Response({"error": "Customer access required"}, status=403)
+            return user, None
+        except:
+            return None, Response({"error": "User profile not found"}, status=404)
+
+    def _get_param(self, request, keys):
+        for key in keys:
+            value = request.data.get(key)
+            if value is None or value == "":
+                value = request.query_params.get(key)
+            if value not in [None, ""]:
+                return value
+        return None
+
+    def put(self, request):
+        user, error_response = self._get_customer_user(request)
+        if error_response:
+            return error_response
+
+        cart, _ = Cart.objects.get_or_create(user=user)
+
+        cart_item_id = self._get_param(request, ['cart_item_id', 'cartItemId'])
+        product_id = self._get_param(request, ['product_id', 'productId', 'id', 'product'])
+        quantity = self._get_param(request, ['quantity', 'qty', 'count', 'amount'])
+
+        if not quantity:
+            return Response({"error": "quantity is required"}, status=400)
+        try:
+            quantity = int(quantity)
+        except (TypeError, ValueError):
+            return Response({"error": "quantity must be an integer"}, status=400)
+        if quantity < 0:
+            return Response({"error": "quantity cannot be negative"}, status=400)
+
+        # If cart_item_id provided, resolve product via cart item
+        if cart_item_id:
+            try:
+                cart_item = CartItem.objects.get(id=cart_item_id, cart=cart)
+            except CartItem.DoesNotExist:
+                return Response({"error": "Item not found in cart"}, status=404)
+            product = cart_item.product
+        else:
+            if not product_id:
+                return Response({"error": "product_id is required (accepted: product_id, productId, id, product)"}, status=400)
+            try:
+                product = Product.objects.get(id=product_id, is_active=True)
+            except Product.DoesNotExist:
+                return Response({"error": "Product not found"}, status=404)
+            try:
+                cart_item = CartItem.objects.get(cart=cart, product=product)
+            except CartItem.DoesNotExist:
+                return Response({"error": "Item not found in cart"}, status=404)
+
+        if quantity == 0:
+            cart_item.delete()
+            return Response({"message": "Item removed from cart"}, status=status.HTTP_200_OK)
+
+        if product.stock_quantity < quantity:
+            return Response({"error": "Insufficient stock"}, status=400)
+
+        cart_item.quantity = quantity
+        cart_item.save()
+        return Response(CartItemSerializer(cart_item).data, status=status.HTTP_200_OK)
+
+    def delete(self, request, *args, **kwargs):
+        user, error_response = self._get_customer_user(request)
+        if error_response:
+            return error_response
+
+        cart, _ = Cart.objects.get_or_create(user=user)
+
+        cart_item_id = self._get_param(request, ['cart_item_id', 'cartItemId'])
+        product_id = self._get_param(request, ['product_id', 'productId', 'id', 'product'])
+
+        if cart_item_id:
+            try:
+                cart_item = CartItem.objects.get(id=cart_item_id, cart=cart)
+            except CartItem.DoesNotExist:
+                return Response({"error": "Item not found in cart"}, status=404)
+        else:
+            if not product_id:
+                return Response({"error": "product_id is required (accepted: product_id, productId, id, product)"}, status=400)
+            try:
+                product = Product.objects.get(id=product_id)
+            except Product.DoesNotExist:
+                return Response({"error": "Product not found"}, status=404)
+            try:
+                cart_item = CartItem.objects.get(cart=cart, product=product)
+            except CartItem.DoesNotExist:
+                return Response({"error": "Item not found in cart"}, status=404)
+
+        cart_item.delete()
+        return Response({"message": "Item removed from cart"}, status=status.HTTP_200_OK)
