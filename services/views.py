@@ -9,6 +9,7 @@ from rest_framework import generics, status
 from django.shortcuts import get_object_or_404
 from authentication.permissions import IsVendor
 from django.core.cache import cache
+from django.db import transaction
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from Notifications.models import Notification
@@ -45,50 +46,7 @@ class VendorProductsView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class VendorProductDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get_object(self, request, product_id):
-        try:
-            user = request.user
-            if user.user_type != 'vendor' or not user.is_fully_active():
-                return None, Response({"error": "Vendor access required"}, status=403)
-            
-            product = Product.objects.get(id=product_id, vendor=user)
-            return product, None
-        except Product.DoesNotExist:
-            return None, Response({"error": "Product not found"}, status=404)
-        except:
-            return None, Response({"error": "User profile not found"}, status=404)
-    
-    def get(self, request, product_id):
-        product, error_response = self.get_object(request, product_id)
-        if error_response:
-            return error_response
-        
-        serializer = ProductSerializer(product)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
-    def put(self, request, product_id):
-        product, error_response = self.get_object(request, product_id)
-        if error_response:
-            return error_response
-        
-        serializer = ProductCreateSerializer(product, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def delete(self, request, product_id):
-        product, error_response = self.get_object(request, product_id)
-        if error_response:
-            return error_response
-        
-        
-        product.is_active = False
-        product.save()
-        return Response({"message": "Product deactivated successfully"}, status=status.HTTP_200_OK)
+## Removed duplicate APIView-based VendorProductDetailView; using generics-based below
 
 
 class CartView(APIView):
@@ -126,28 +84,25 @@ class CartView(APIView):
             quantity = serializer.validated_data['quantity']
             
             try:
-                product = Product.objects.get(id=product_id, is_active=True)
-                
-        
-                if product.stock_quantity < quantity:
-                    return Response({"error": "Insufficient stock"}, status=400)
-                
-                
-                cart_item, item_created = CartItem.objects.get_or_create(
-                    cart=cart, 
-                    product=product,
-                    defaults={'quantity': quantity}
-                )
-                
-                if not item_created:
+                with transaction.atomic():
+                    product = Product.objects.select_for_update().get(id=product_id, is_active=True)
+                    if product.stock_quantity < quantity:
+                        return Response({"error": "Insufficient stock"}, status=400)
+
+                    cart_item, item_created = CartItem.objects.select_for_update().get_or_create(
+                        cart=cart, 
+                        product=product,
+                        defaults={'quantity': quantity}
+                    )
                     
-                    new_quantity = cart_item.quantity + quantity
-                    if product.stock_quantity < new_quantity:
-                        return Response({
-                            "error": f"Cannot add {quantity} more. Only {product.stock_quantity - cart_item.quantity} available"
-                        }, status=400)
-                    cart_item.quantity = new_quantity
-                    cart_item.save()
+                    if not item_created:
+                        new_quantity = cart_item.quantity + quantity
+                        if product.stock_quantity < new_quantity:
+                            return Response({
+                                "error": f"Cannot add {quantity} more. Only {product.stock_quantity - cart_item.quantity} available"
+                            }, status=400)
+                        cart_item.quantity = new_quantity
+                        cart_item.save()
                 
                 return Response(CartItemSerializer(cart_item).data, status=status.HTTP_201_CREATED)
                 
@@ -161,11 +116,7 @@ class CartView(APIView):
 
 
 
-# class ProductListView(generics.ListAPIView):
-   
-#     queryset = Product.objects.filter(is_active=True, stock_quantity__gt=0)
-#     serializer_class = ProductSerializer
-#     permission_classes = []
+
 
 class ProductListView(APIView):
     permission_classes = []
@@ -197,8 +148,8 @@ class VendorProductListCreateView(generics.ListCreateAPIView):
         return ProductSerializer
     
     def perform_create(self, serializer):
-        
         serializer.save(vendor=self.request.user)
+        cache.delete("product_list")
 
 
 class VendorProductDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -221,18 +172,23 @@ class VendorProductDetailView(generics.RetrieveUpdateDestroyAPIView):
        
         instance.is_active = False
         instance.save()
+        cache.delete("product_list")
     
     def destroy(self, request, *args, **kwargs):
-    # Get the product instance to be deleted
+   
      instance = self.get_object()
     
     # Perform the deletion
-     instance.delete()  # This deletes the object from the database entirely
+     instance.delete()  
     
      return Response(
         {"message": "Product deleted successfully"}, 
-        status=status.HTTP_204_NO_CONTENT  # HTTP 204 No Content for successful deletion
+        status=status.HTTP_204_NO_CONTENT  
     )
+
+    def perform_update(self, serializer):
+        serializer.save()
+        cache.delete("product_list")
 
 
 
